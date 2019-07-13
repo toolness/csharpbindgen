@@ -1,2 +1,5 @@
 target/
 tests/snapshots/*.new
+
+# This is a library, so we should ignore Cargo.lock.
+Cargo.lock
