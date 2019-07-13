@@ -2,7 +2,8 @@
 
 csharpbindgen is a Rust library for generating low-level C# bindings from Rust code.
 
-It is currently in a very primitive state, largely designed for use by the
-[Unity Pathfinder plugin][plugin] and missing many features.
+For documentation, clone this repository and run:
 
-[plugin]: https://github.com/toolness/pathfinder-unity-fun
+```
+cargo doc --open
+```
