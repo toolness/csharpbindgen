@@ -1,3 +1,50 @@
+//! csharpbindgen is a library for generating low-level C# bindings
+//! from Rust code.
+//! 
+//! It is currently in a very primitive state, largely designed for use by the
+//! [Unity Pathfinder plugin][plugin] and missing many features.
+//! 
+//! ## Quick start
+//! 
+//! The library is intended for use via a [Cargo build script][build].
+//! 
+//! Here's an example of a simple program that converts some simple Rust code
+//! into C#:
+//! 
+//! ```
+//! let rust = r#"
+//!   pub unsafe extern "C" fn my_func(foo: i32) -> f32 { /* ... */ }
+//! "#;
+//! 
+//! let code = csharpbindgen::Builder::new("MyDll", rust.to_string())
+//!     .class_name("MyStuff")
+//!     .generate()
+//!     .unwrap();
+//!
+//! println!("{}", code);
+//! ```
+//!
+//! This will print out something like the following C# code:
+//! 
+//! ```csharp
+//! // This file has been auto-generated, please do not edit it.
+//!
+//! using System;
+//! using System.Runtime.InteropServices;
+//!
+//! internal class MyStuff {
+//!     [DllImport("MyDll")]
+//!     internal static extern float my_func(Int32 foo);
+//! }
+//! ```
+//! 
+//! For a more complete example, see the Unity Pathfinder plugin's [`build.rs`][].
+//! 
+//! 
+//! [plugin]: https://github.com/toolness/pathfinder-unity-fun
+//! [build]: https://doc.rust-lang.org/cargo/reference/build-scripts.html
+//! [`build.rs`]: https://github.com/toolness/pathfinder-unity-fun/blob/master/build.rs
+
 use std::collections::HashMap;
 use std::borrow::Borrow;
 use std::fmt::{Formatter, Display};
@@ -14,6 +61,7 @@ use error::{Error, Result};
 
 const INDENT: &'static str = "    ";
 
+/// Enumeration for C#'s access modifiers.
 #[derive(Clone, Copy)]
 pub enum CSAccess {
     Private,
