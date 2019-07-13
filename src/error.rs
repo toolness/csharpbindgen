@@ -7,7 +7,7 @@ pub enum Error {
     UnsupportedError(String, Option<syn::Ident>)
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub(crate) type Result<T> = std::result::Result<T, Error>;
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
@@ -40,7 +40,7 @@ impl std::error::Error for Error {
     }
 }
 
-pub fn add_ident<T>(result: Result<T>, ident: &syn::Ident) -> Result<T> {
+pub(crate) fn add_ident<T>(result: Result<T>, ident: &syn::Ident) -> Result<T> {
     match result {
         Err(Error::UnsupportedError(reason, None)) => {
             Err(Error::UnsupportedError(reason, Some(ident.clone())))
