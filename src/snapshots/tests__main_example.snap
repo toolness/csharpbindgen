@@ -1,0 +1,44 @@
+---
+created: "2019-07-04T19:55:41.254654100Z"
+creator: insta@0.8.1
+source: src/lib.rs
+expression: code
+---
+// This file has been auto-generated, please do not edit it.
+
+using System;
+using System.Runtime.InteropServices;
+
+[Serializable]
+[StructLayout(LayoutKind.Sequential)]
+internal struct MyStruct {
+    internal float foo;
+    internal float bar;
+
+    internal MyStruct(float foo, float bar) {
+        this.foo = foo;
+        this.bar = bar;
+    }
+}
+
+[Serializable]
+[StructLayout(LayoutKind.Sequential)]
+public struct PublicStruct {
+    public Int32 bop;
+
+    public PublicStruct(Int32 bop) {
+        this.bop = bop;
+    }
+}
+
+internal class MyStuff {
+    internal const byte BOOP = 1;
+
+    [DllImport("MyDll")]
+    public static extern void public_func();
+
+    [DllImport("MyDll")]
+    internal static extern byte blarg(Int32 a, ref MyStruct b, IntPtr /* MyOpaqueStruct */ c);
+
+}
+
