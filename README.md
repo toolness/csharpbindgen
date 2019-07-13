@@ -1,4 +1,4 @@
-# `csharpbindgen` &emsp; [![CircleCI](https://circleci.com/gh/toolness/csharpbindgen.svg?style=svg)](https://circleci.com/gh/toolness/csharpbindgen) [![docs.rs](https://docs.rs/csharpbindgen/badge.svg)][docs]
+# `csharpbindgen` &emsp; [![CircleCI](https://circleci.com/gh/toolness/csharpbindgen.svg?style=svg)](https://circleci.com/gh/toolness/csharpbindgen) [![docs.rs](https://docs.rs/csharpbindgen/badge.svg)][docs] [![crates.io](https://img.shields.io/crates/v/csharpbindgen.svg)](https://crates.io/crates/csharpbindgen)
 
 csharpbindgen is a Rust library for generating low-level C# bindings from Rust code.
 
