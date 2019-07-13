@@ -4,8 +4,9 @@ version = "0.1.0"
 authors = ["Atul Varma <varmaa@gmail.com>"]
 description = "A library for generating C# bindings from Rust code."
 license = "MPL-2.0"
-keywords = ["bindings", "ffi", "code-generation"]
+keywords = ["bindings", "ffi", "code-generation", "csharp"]
 categories = ["external-ffi-bindings", "development-tools::ffi"]
+readme = "README.md"
 repository = "https://github.com/toolness/csharpbindgen/"
 edition = "2018"
 
