@@ -52,12 +52,13 @@ use std::fmt;
 use std::rc::Rc;
 use syn::Item;
 
-pub mod error;
+mod error;
 mod symbol_config;
 mod ignores;
 
 use symbol_config::{SymbolConfigManager, SymbolConfig};
-use error::{Error, Result};
+use error::Result;
+pub use error::Error;
 
 const INDENT: &'static str = "    ";
 
@@ -433,6 +434,9 @@ impl Display for CSFile {
     }
 }
 
+/// A [builder pattern] for the Rust-to-C# conversion process.
+/// 
+/// [builder pattern]: https://doc.rust-lang.org/1.0.0/style/ownership/builders.html
 pub struct Builder {
     class_name: String,
     dll_name: String,
@@ -441,6 +445,12 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Creates a new instance with the following arguments:
+    /// 
+    /// * `dll_name` is the name of the DLL that the C# `DllImport` attribute
+    ///   will be bound to for all exported functions.
+    /// 
+    /// * `rust_code` is the source Rust code to convert into C#.
     pub fn new<T: AsRef<str>>(
         dll_name: T,
         rust_code: String
@@ -453,16 +463,28 @@ impl Builder {
         }
     }
 
+    /// Sets the name of the C# class that will contain all exported functions.
+    /// If never called, the C# class will be called `RustExports`.
     pub fn class_name<T: AsRef<str>>(mut self, class_name: T) -> Self {
         self.class_name = String::from(class_name.as_ref());
         self
     }
 
+    /// Specifies a list of Rust identifier patterns to be ignored (i.e., not
+    /// exported to C#).
+    /// 
+    /// The pattern syntax is currently very simple: if it ends with a `*`, it
+    /// matches any Rust identifier that starts with the part of the pattern before
+    /// the `*` (e.g., `Boop*` matches `BoopJones` and `BoopFoo`). Otherwise, it
+    /// represents an exact match to a Rust identifier.
     pub fn ignore(mut self, ignores: &[&str]) -> Self {
         self.sconfig.ignores.add_static_array(ignores);
         self
     }
 
+    /// Specifies that the given Rust identifier should be exported to C# with the
+    /// given C# access modifier. By default, all exports are given the `internal`
+    /// access modifier.
     pub fn access<T: AsRef<str>>(mut self, symbol_name: T, access: CSAccess) -> Self {
         self.sconfig.config_map.insert(String::from(symbol_name.as_ref()), SymbolConfig {
             access
@@ -470,6 +492,7 @@ impl Builder {
         self
     }
 
+    /// Performs the conversion of source Rust code to C#.
     pub fn generate(self) -> Result<String> {
         let syntax = parse_file(&self.rust_code)?;
         let mut program = CSFile::new(self.class_name, self.dll_name);

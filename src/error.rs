@@ -1,9 +1,16 @@
 use std::fmt;
 use std::fmt::{Formatter, Display};
 
+/// This represents an error from the library.
 #[derive(Debug)]
 pub enum Error {
+    /// A wrapped error from the Syn library, caused when
+    /// parsing the source Rust code.
     SynError(syn::Error),
+    /// Represents a feature of the source Rust code that cannot
+    /// be converted to C#. The first item is the error message,
+    /// and the second is the identifier in the source Rust
+    /// code that caused the error.
     UnsupportedError(String, Option<syn::Ident>)
 }
 
