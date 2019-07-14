@@ -28,3 +28,14 @@ fn test_main_example() {
 
     assert_snapshot_matches!(example_name, code);
 }
+
+#[test]
+fn test_safe_handles() {
+    let example_name = "safe_handles_example";
+    let code = Builder::new("MyDll", load_example(example_name))
+        .use_safe_handles()
+        .generate()
+        .unwrap();
+
+    assert_snapshot_matches!(example_name, code);
+}

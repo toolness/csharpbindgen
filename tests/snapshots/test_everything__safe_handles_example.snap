@@ -1,0 +1,17 @@
+---
+created: "2019-07-14T11:38:44.025356Z"
+creator: insta@0.8.1
+source: tests/test_everything.rs
+expression: code
+---
+// This file has been auto-generated, please do not edit it.
+
+using System;
+using System.Runtime.InteropServices;
+
+internal class RustExports {
+    [DllImport("MyDll")]
+    internal static extern byte blarg(SafeMyOpaqueStructHandle c);
+
+}
+

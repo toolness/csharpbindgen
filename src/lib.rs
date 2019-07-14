@@ -54,9 +54,11 @@ use syn::Item;
 
 mod error;
 mod symbol_config;
+mod global_config;
 mod ignores;
 
 use symbol_config::{SymbolConfigManager, SymbolConfig};
+use global_config::GlobalConfig;
 use error::Result;
 pub use error::Error;
 
@@ -94,10 +96,10 @@ struct CSTypeDef {
 }
 
 impl CSTypeDef {
-    pub fn from_rust_type_def(rust_type_def: &syn::ItemType) -> Result<Self> {
+    pub fn from_rust_type_def(rust_type_def: &syn::ItemType, gconf: &GlobalConfig) -> Result<Self> {
         Ok(CSTypeDef {
             name: rust_type_def.ident.to_string(),
-            ty: CSType::from_rust_type(&rust_type_def.ty)?
+            ty: CSType::from_rust_type(&rust_type_def.ty, &gconf)?
         })
     }
 }
@@ -106,11 +108,12 @@ impl CSTypeDef {
 struct CSType {
     name: String,
     is_ptr: bool,
+    use_safe_handle: bool,
     st: Option<Rc<CSStruct>>
 }
 
 impl CSType {
-    pub fn from_rust_type(rust_type: &syn::Type) -> Result<Self> {
+    pub fn from_rust_type(rust_type: &syn::Type, gconf: &GlobalConfig) -> Result<Self> {
         match rust_type {
             syn::Type::Path(type_path) => {
                 let last = type_path.path.segments.last()
@@ -118,11 +121,12 @@ impl CSType {
                 Ok(CSType {
                     name: last.value().ident.to_string(),
                     is_ptr: false,
+                    use_safe_handle: gconf.use_safe_handles,
                     st: None
                 })
             },
             syn::Type::Ptr(type_ptr) => {
-                let mut wrapped_type = CSType::from_rust_type(&type_ptr.elem)?;
+                let mut wrapped_type = CSType::from_rust_type(&type_ptr.elem, &gconf)?;
                 if wrapped_type.is_ptr {
                     return unsupported(format!(
                         "double pointers for {} are unsupported!", wrapped_type.name
@@ -145,7 +149,11 @@ impl Display for CSType {
             if self.st.is_some() {
                 write!(f, "ref {}", name)
             } else {
-                write!(f, "IntPtr /* {} */", name)
+                if self.use_safe_handle {
+                    write!(f, "Safe{}Handle", name)
+                } else {
+                    write!(f, "IntPtr /* {} */", name)
+                }
             }
         } else {
             write!(f, "{}", name)
@@ -161,7 +169,7 @@ struct CSConst {
 }
 
 impl CSConst {
-    pub fn from_rust_const(rust_const: &syn::ItemConst, cfg: SymbolConfig) -> Result<Self> {
+    pub fn from_rust_const(rust_const: &syn::ItemConst, cfg: SymbolConfig, gconf: &GlobalConfig) -> Result<Self> {
         let value = if let syn::Expr::Lit(expr_lit) = &rust_const.expr.borrow() {
             if let syn::Lit::Int(lit_int) = &expr_lit.lit {
                 lit_int.value().to_string()
@@ -175,7 +183,7 @@ impl CSConst {
         };
         Ok(CSConst {
             name: munge_cs_name(rust_const.ident.to_string()),
-            ty: CSType::from_rust_type(&rust_const.ty)?,
+            ty: CSType::from_rust_type(&rust_const.ty, gconf)?,
             value,
             cfg
         })
@@ -188,10 +196,10 @@ struct CSStructField {
 }
 
 impl CSStructField {
-    pub fn from_named_rust_field(rust_field: &syn::Field) -> Result<Self> {
+    pub fn from_named_rust_field(rust_field: &syn::Field, gconf: &GlobalConfig) -> Result<Self> {
         Ok(CSStructField {
             name: munge_cs_name(rust_field.ident.as_ref().unwrap().to_string()),
-            ty: CSType::from_rust_type(&rust_field.ty)?
+            ty: CSType::from_rust_type(&rust_field.ty, gconf)?
         })
     }
 
@@ -207,12 +215,12 @@ struct CSStruct {
 }
 
 impl CSStruct {
-    pub fn from_rust_struct(rust_struct: &syn::ItemStruct, cfg: SymbolConfig) -> Result<Self> {
+    pub fn from_rust_struct(rust_struct: &syn::ItemStruct, cfg: SymbolConfig, gconf: &GlobalConfig) -> Result<Self> {
         let mut fields = vec![];
 
         if let syn::Fields::Named(rust_fields) = &rust_struct.fields {
             for rust_field in rust_fields.named.iter() {
-                fields.push(CSStructField::from_named_rust_field(rust_field)?);
+                fields.push(CSStructField::from_named_rust_field(rust_field, gconf)?);
             }
         }
         Ok(CSStruct {
@@ -252,11 +260,11 @@ struct CSFuncArg {
 }
 
 impl CSFuncArg {
-    pub fn from_rust_arg_captured(rust_arg: &syn::ArgCaptured) -> Result<Self> {
+    pub fn from_rust_arg_captured(rust_arg: &syn::ArgCaptured, gconf: &GlobalConfig) -> Result<Self> {
         if let syn::Pat::Ident(pat_ident) = &rust_arg.pat {
             Ok(CSFuncArg {
                 name: munge_cs_name(pat_ident.ident.to_string()),
-                ty: CSType::from_rust_type(&rust_arg.ty)?
+                ty: CSType::from_rust_type(&rust_arg.ty, gconf)?
             })
         } else {
             unsupported(format!("captured arg pattern is unsupported: {:?}", rust_arg.pat))
@@ -276,12 +284,12 @@ struct CSFunc {
 }
 
 impl CSFunc {
-    pub fn from_rust_fn(rust_fn: &syn::ItemFn, cfg: SymbolConfig) -> Result<Self> {
+    pub fn from_rust_fn(rust_fn: &syn::ItemFn, cfg: SymbolConfig, gconf: &GlobalConfig) -> Result<Self> {
         let mut args = vec![];
 
         for input in rust_fn.decl.inputs.iter() {
             if let syn::FnArg::Captured(cap) = input {
-                args.push(CSFuncArg::from_rust_arg_captured(&cap)?);
+                args.push(CSFuncArg::from_rust_arg_captured(&cap, &gconf)?);
             } else {
                 return unsupported(format!(
                     "Input for function '{}' is unsupported: {:?}",
@@ -294,7 +302,7 @@ impl CSFunc {
         let return_ty = match &rust_fn.decl.output {
             syn::ReturnType::Default => None,
             syn::ReturnType::Type(_, ty) => {
-                Some(CSType::from_rust_type(&ty)?)
+                Some(CSType::from_rust_type(&ty, &gconf)?)
             }
         };
 
@@ -345,21 +353,22 @@ impl CSFile {
     pub fn populate_from_rust_file(
         &mut self,
         rust_file: &syn::File,
-        cfg_mgr: &SymbolConfigManager
+        cfg_mgr: &SymbolConfigManager,
+        gconf: &GlobalConfig
     ) -> Result<()> {
         for item in rust_file.items.iter() {
             match item {
                 Item::Const(item_const) => {
                     if let Some(cfg) = cfg_mgr.get(&item_const.ident) {
                         let cs_const = error::add_ident(
-                            CSConst::from_rust_const(&item_const, cfg), &item_const.ident)?;
+                            CSConst::from_rust_const(&item_const, cfg, gconf), &item_const.ident)?;
                         self.consts.push(cs_const);
                     }
                 },
                 Item::Struct(item_struct) => {
                     if let Some(cfg) = cfg_mgr.get(&item_struct.ident) {
                         let cs_struct = error::add_ident(
-                            CSStruct::from_rust_struct(&item_struct, cfg), &item_struct.ident)?;
+                            CSStruct::from_rust_struct(&item_struct, cfg, gconf), &item_struct.ident)?;
                         self.structs.push(Rc::new(cs_struct));
                     }
                 },
@@ -367,7 +376,7 @@ impl CSFile {
                     if item_fn.abi.is_some() {
                         if let Some(cfg) = cfg_mgr.get(&item_fn.ident) {
                             let cs_func = error::add_ident(
-                                CSFunc::from_rust_fn(&item_fn, cfg), &item_fn.ident)?;
+                                CSFunc::from_rust_fn(&item_fn, cfg, gconf), &item_fn.ident)?;
                             self.funcs.push(cs_func);
                         }
                     }
@@ -375,7 +384,7 @@ impl CSFile {
                 Item::Type(item_type) => {
                     if let Some(_cfg) = cfg_mgr.get(&item_type.ident) {
                         let type_def = error::add_ident(
-                            CSTypeDef::from_rust_type_def(&item_type), &item_type.ident)?;
+                            CSTypeDef::from_rust_type_def(&item_type, gconf), &item_type.ident)?;
                         self.type_defs.insert(type_def.name.clone(), type_def);
                     }
                 },
@@ -441,7 +450,8 @@ pub struct Builder {
     class_name: String,
     dll_name: String,
     rust_code: String,
-    sconfig: SymbolConfigManager
+    sconfig: SymbolConfigManager,
+    gconf: GlobalConfig
 }
 
 impl Builder {
@@ -459,7 +469,8 @@ impl Builder {
             class_name: String::from("RustExports"),
             dll_name: String::from(dll_name.as_ref()),
             rust_code,
-            sconfig: SymbolConfigManager::new()
+            sconfig: SymbolConfigManager::new(),
+            gconf: GlobalConfig::default()
         }
     }
 
@@ -492,11 +503,21 @@ impl Builder {
         self
     }
 
+    /// Specifies that any references to opaque pointers (i.e., pointers that are owned
+    /// by the Rust code, which C# doesn't know the structure of) should be
+    /// assumed to be [`SafeHandle`][] subclasses instead of `IntPtr`s. This means that
+    /// the actual definition of the `SafeHandle` subclass will need to be provided by
+    /// external code.
+    pub fn use_safe_handles(mut self) -> Self {
+        self.gconf.use_safe_handles = true;
+        self
+    }
+
     /// Performs the conversion of source Rust code to C#.
     pub fn generate(self) -> Result<String> {
         let syntax = parse_file(&self.rust_code)?;
         let mut program = CSFile::new(self.class_name, self.dll_name);
-        program.populate_from_rust_file(&syntax, &self.sconfig)?;
+        program.populate_from_rust_file(&syntax, &self.sconfig, &self.gconf)?;
         program.resolve_types()?;
         Ok(format!("{}", program))
     }
