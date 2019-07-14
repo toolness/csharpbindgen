@@ -7,6 +7,11 @@ use csharpbindgen::{
     CSAccess
 };
 
+fn run_example_test<F: FnOnce(Builder) -> Builder>(name: &'static str, build: F) {
+    let builder = build(Builder::new("MyDll", load_example(name)));
+    assert_snapshot_matches!(name, builder.generate().unwrap());
+}
+
 fn load_example(name: &'static str) -> String {
     let mut path = PathBuf::new();
     path.push("tests");
@@ -17,25 +22,15 @@ fn load_example(name: &'static str) -> String {
 
 #[test]
 fn test_main_example() {
-    let example_name = "main_example";
-    let code = Builder::new("MyDll", load_example(example_name))
-        .class_name("MyStuff")
-        .ignore(&["ignore_*", "IGNORE_*", "Ignore*"])
-        .access("public_func", CSAccess::Public)
-        .access("PublicStruct", CSAccess::Public)
-        .generate()
-        .unwrap();
-
-    assert_snapshot_matches!(example_name, code);
+    run_example_test("main_example", |b|
+        b.class_name("MyStuff")
+         .ignore(&["ignore_*", "IGNORE_*", "Ignore*"])
+         .access("public_func", CSAccess::Public)
+         .access("PublicStruct", CSAccess::Public)
+    );
 }
 
 #[test]
 fn test_safe_handles() {
-    let example_name = "safe_handles_example";
-    let code = Builder::new("MyDll", load_example(example_name))
-        .use_safe_handles()
-        .generate()
-        .unwrap();
-
-    assert_snapshot_matches!(example_name, code);
+    run_example_test("safe_handles_example", |b| b.use_safe_handles());
 }
