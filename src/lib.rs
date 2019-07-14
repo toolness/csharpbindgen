@@ -150,7 +150,7 @@ impl Display for CSType {
                 write!(f, "ref {}", name)
             } else {
                 if self.use_safe_handle {
-                    write!(f, "Safe{}Handle", name)
+                    write!(f, "{}Handle", name)
                 } else {
                     write!(f, "IntPtr /* {} */", name)
                 }
@@ -507,7 +507,11 @@ impl Builder {
     /// by the Rust code, which C# doesn't know the structure of) should be
     /// assumed to be [`SafeHandle`][] subclasses instead of `IntPtr`s. This means that
     /// the actual definition of the `SafeHandle` subclass will need to be provided by
-    /// external code.
+    /// external code. The name of the `SafeHandle` subclass will be the name of the
+    /// Rust type pointed to with `Handle` appended to the end, e.g. `*mut Path2D`
+    /// will become `Path2DHandle` (as opposed to `IntPtr`).
+    /// 
+    /// [`SafeHandle`]: https://docs.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.safehandle
     pub fn use_safe_handles(mut self) -> Self {
         self.gconf.use_safe_handles = true;
         self
