@@ -1,7 +1,7 @@
 ---
-created: "2019-07-04T19:55:41.254654100Z"
+created: "2019-11-23T12:03:30.755697800Z"
 creator: insta@0.8.1
-source: src/lib.rs
+source: tests/test_everything.rs
 expression: code
 ---
 // This file has been auto-generated, please do not edit it.
@@ -12,10 +12,10 @@ using System.Runtime.InteropServices;
 [Serializable]
 [StructLayout(LayoutKind.Sequential)]
 internal struct MyStruct {
-    internal float foo;
-    internal float bar;
+    internal Single foo;
+    internal Single bar;
 
-    internal MyStruct(float foo, float bar) {
+    internal MyStruct(Single foo, Single bar) {
         this.foo = foo;
         this.bar = bar;
     }
@@ -32,13 +32,13 @@ public struct PublicStruct {
 }
 
 internal class MyStuff {
-    internal const byte BOOP = 1;
+    internal const Byte BOOP = 1;
 
     [DllImport("MyDll")]
     public static extern void public_func();
 
     [DllImport("MyDll")]
-    internal static extern byte blarg(Int32 a, ref MyStruct b, IntPtr /* MyOpaqueStruct */ c);
+    internal static extern Byte blarg(Int32 a, ref MyStruct b, IntPtr /* MyOpaqueStruct */ c);
 
 }
 
