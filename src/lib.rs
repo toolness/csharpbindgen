@@ -34,7 +34,7 @@
 //!
 //! internal class MyStuff {
 //!     [DllImport("MyDll")]
-//!     internal static extern float my_func(Int32 foo);
+//!     internal static extern Single my_func(Int32 foo);
 //! }
 //! ```
 //! 
