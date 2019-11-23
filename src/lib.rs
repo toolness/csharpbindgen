@@ -534,11 +534,18 @@ fn munge_cs_name(name: String) -> String {
 
 fn to_cs_primitive<'a>(type_name: &'a str) -> &'a str {
     match type_name {
-        "u8" => "byte",
-        "f32" => "float",
+        "i8" => "Byte",
+        "u8" => "SByte",
+        "i16" => "Int16",
+        "u16" => "UInt16",
         "i32" => "Int32",
         "u32" => "UInt32",
+        "u64" => "Int64",
+        "i64" => "UInt64",
+        "isize" => "IntPtr",
         "usize" => "UIntPtr",
+        "f32" => "Single",
+        "f64" => "Double",
         _ => type_name
     }
 }
