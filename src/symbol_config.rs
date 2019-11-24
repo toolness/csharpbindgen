@@ -5,27 +5,27 @@ use crate::CSAccess;
 
 #[derive(Clone, Copy)]
 pub struct SymbolConfig {
-    pub access: CSAccess
+    pub access: CSAccess,
 }
 
 impl Default for SymbolConfig {
     fn default() -> Self {
         SymbolConfig {
-            access: CSAccess::default()
+            access: CSAccess::default(),
         }
     }
 }
 
 pub struct SymbolConfigManager {
     pub ignores: Ignores,
-    pub config_map: HashMap<String, SymbolConfig>
+    pub config_map: HashMap<String, SymbolConfig>,
 }
 
 impl SymbolConfigManager {
     pub fn new() -> Self {
         SymbolConfigManager {
             ignores: Ignores::new(),
-            config_map: HashMap::new()
+            config_map: HashMap::new(),
         }
     }
 
