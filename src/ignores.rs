@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 pub struct Ignores {
     exact: BTreeSet<String>,
-    prefixes: Vec<String>
+    prefixes: Vec<String>,
 }
 
 impl Ignores {
@@ -16,7 +16,7 @@ impl Ignores {
     pub fn add_static_array(&mut self, ignore: &[&str]) {
         for name in ignore.iter() {
             if (*name).ends_with("*") {
-                let substr = &(*name)[..(*name).len()-1];
+                let substr = &(*name)[..(*name).len() - 1];
                 self.prefixes.push(String::from(substr));
             }
             self.exact.insert(String::from(*name));

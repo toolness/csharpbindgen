@@ -1,21 +1,21 @@
 //! csharpbindgen is a library for generating low-level C# bindings
 //! from Rust code.
-//! 
+//!
 //! It is currently in a very primitive state, largely designed for use by the
 //! [Unity Pathfinder plugin][plugin] and missing many features.
-//! 
+//!
 //! ## Quick start
-//! 
+//!
 //! The library is intended for use via a [Cargo build script][build].
-//! 
+//!
 //! Here's an example of a simple program that converts some simple Rust code
 //! into C#:
-//! 
+//!
 //! ```
 //! let rust = r#"
 //!   pub unsafe extern "C" fn my_func(foo: i32) -> f32 { /* ... */ }
 //! "#;
-//! 
+//!
 //! let code = csharpbindgen::Builder::new("MyDll", rust.to_string())
 //!     .class_name("MyStuff")
 //!     .generate()
@@ -25,7 +25,7 @@
 //! ```
 //!
 //! This will print out something like the following C# code:
-//! 
+//!
 //! ```csharp
 //! // This file has been auto-generated, please do not edit it.
 //!
@@ -37,28 +37,28 @@
 //!     internal static extern Single my_func(Int32 foo);
 //! }
 //! ```
-//! 
+//!
 //! For a more complete example, see the Unity Pathfinder plugin's [`build.rs`][].
-//! 
-//! 
+//!
+//!
 //! [plugin]: https://github.com/toolness/pathfinder-unity-fun
 //! [build]: https://doc.rust-lang.org/cargo/reference/build-scripts.html
 //! [`build.rs`]: https://github.com/toolness/pathfinder-unity-fun/blob/master/build.rs
 
-use std::collections::HashMap;
 use std::borrow::Borrow;
-use std::fmt::{Formatter, Display};
+use std::collections::HashMap;
 use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::rc::Rc;
 use syn::Item;
 
 mod error;
-mod symbol_config;
 mod ignores;
+mod symbol_config;
 
-use symbol_config::{SymbolConfigManager, SymbolConfig};
-use error::Result;
 pub use error::Error;
+use error::Result;
+use symbol_config::{SymbolConfig, SymbolConfigManager};
 
 const INDENT: &'static str = "    ";
 
@@ -68,17 +68,21 @@ pub enum CSAccess {
     Private,
     Protected,
     Internal,
-    Public
+    Public,
 }
 
 impl Display for CSAccess {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            CSAccess::Private => "private",
-            CSAccess::Protected => "protected",
-            CSAccess::Internal => "internal",
-            CSAccess::Public => "public"
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                CSAccess::Private => "private",
+                CSAccess::Protected => "protected",
+                CSAccess::Internal => "internal",
+                CSAccess::Public => "public",
+            }
+        )
     }
 }
 
@@ -90,14 +94,14 @@ impl Default for CSAccess {
 
 struct CSTypeDef {
     name: String,
-    ty: CSType
+    ty: CSType,
 }
 
 impl CSTypeDef {
     pub fn from_rust_type_def(rust_type_def: &syn::ItemType) -> Result<Self> {
         Ok(CSTypeDef {
             name: rust_type_def.ident.to_string(),
-            ty: CSType::from_rust_type(&rust_type_def.ty)?
+            ty: CSType::from_rust_type(&rust_type_def.ty)?,
         })
     }
 }
@@ -106,34 +110,36 @@ impl CSTypeDef {
 struct CSType {
     name: String,
     is_ptr: bool,
-    st: Option<Rc<CSStruct>>
+    st: Option<Rc<CSStruct>>,
 }
 
 impl CSType {
     pub fn from_rust_type(rust_type: &syn::Type) -> Result<Self> {
         match rust_type {
             syn::Type::Path(type_path) => {
-                let last = type_path.path.segments.last()
-                  .expect("expected at least one path segment on type!");
+                let last = type_path
+                    .path
+                    .segments
+                    .last()
+                    .expect("expected at least one path segment on type!");
                 Ok(CSType {
                     name: last.value().ident.to_string(),
                     is_ptr: false,
-                    st: None
+                    st: None,
                 })
-            },
+            }
             syn::Type::Ptr(type_ptr) => {
                 let mut wrapped_type = CSType::from_rust_type(&type_ptr.elem)?;
                 if wrapped_type.is_ptr {
                     return unsupported(format!(
-                        "double pointers for {} are unsupported!", wrapped_type.name
+                        "double pointers for {} are unsupported!",
+                        wrapped_type.name
                     ));
                 }
                 wrapped_type.is_ptr = true;
                 Ok(wrapped_type)
-            },
-            _ => {
-                unsupported(format!("the type is unsupported"))
             }
+            _ => unsupported(format!("the type is unsupported")),
         }
     }
 }
@@ -157,7 +163,7 @@ struct CSConst {
     name: String,
     ty: CSType,
     value: String,
-    cfg: SymbolConfig
+    cfg: SymbolConfig,
 }
 
 impl CSConst {
@@ -167,17 +173,21 @@ impl CSConst {
                 lit_int.value().to_string()
             } else {
                 return unsupported(format!(
-                    "Unsupported const expression literal value: {:?}", expr_lit))
+                    "Unsupported const expression literal value: {:?}",
+                    expr_lit
+                ));
             }
         } else {
             return unsupported(format!(
-                "Unsupported const expression value: {:?}", rust_const.expr))
+                "Unsupported const expression value: {:?}",
+                rust_const.expr
+            ));
         };
         Ok(CSConst {
             name: munge_cs_name(rust_const.ident.to_string()),
             ty: CSType::from_rust_type(&rust_const.ty)?,
             value,
-            cfg
+            cfg,
         })
     }
 }
@@ -191,7 +201,7 @@ impl CSStructField {
     pub fn from_named_rust_field(rust_field: &syn::Field) -> Result<Self> {
         Ok(CSStructField {
             name: munge_cs_name(rust_field.ident.as_ref().unwrap().to_string()),
-            ty: CSType::from_rust_type(&rust_field.ty)?
+            ty: CSType::from_rust_type(&rust_field.ty)?,
         })
     }
 
@@ -203,7 +213,7 @@ impl CSStructField {
 struct CSStruct {
     name: String,
     fields: Vec<CSStructField>,
-    cfg: SymbolConfig
+    cfg: SymbolConfig,
 }
 
 impl CSStruct {
@@ -218,7 +228,7 @@ impl CSStruct {
         Ok(CSStruct {
             name: rust_struct.ident.to_string(),
             fields,
-            cfg
+            cfg,
         })
     }
 }
@@ -232,13 +242,22 @@ impl Display for CSStruct {
             writeln!(f, "{}{} {};", INDENT, self.cfg.access, field.to_string())?;
         }
 
-        let constructor_args: Vec<String> = self.fields
-          .iter()
-          .map(|field| field.to_string())
-          .collect();
-        writeln!(f, "\n{}{} {}({}) {{", INDENT, self.cfg.access, self.name, constructor_args.join(", "))?;
+        let constructor_args: Vec<String> =
+            self.fields.iter().map(|field| field.to_string()).collect();
+        writeln!(
+            f,
+            "\n{}{} {}({}) {{",
+            INDENT,
+            self.cfg.access,
+            self.name,
+            constructor_args.join(", ")
+        )?;
         for field in self.fields.iter() {
-            writeln!(f, "{}{}this.{} = {};", INDENT, INDENT, field.name, field.name)?;
+            writeln!(
+                f,
+                "{}{}this.{} = {};",
+                INDENT, INDENT, field.name, field.name
+            )?;
         }
         writeln!(f, "{}}}", INDENT)?;
 
@@ -248,7 +267,7 @@ impl Display for CSStruct {
 
 struct CSFuncArg {
     name: String,
-    ty: CSType
+    ty: CSType,
 }
 
 impl CSFuncArg {
@@ -256,10 +275,13 @@ impl CSFuncArg {
         if let syn::Pat::Ident(pat_ident) = &rust_arg.pat {
             Ok(CSFuncArg {
                 name: munge_cs_name(pat_ident.ident.to_string()),
-                ty: CSType::from_rust_type(&rust_arg.ty)?
+                ty: CSType::from_rust_type(&rust_arg.ty)?,
             })
         } else {
-            unsupported(format!("captured arg pattern is unsupported: {:?}", rust_arg.pat))
+            unsupported(format!(
+                "captured arg pattern is unsupported: {:?}",
+                rust_arg.pat
+            ))
         }
     }
 
@@ -272,7 +294,7 @@ struct CSFunc {
     name: String,
     args: Vec<CSFuncArg>,
     return_ty: Option<CSType>,
-    cfg: SymbolConfig
+    cfg: SymbolConfig,
 }
 
 impl CSFunc {
@@ -293,16 +315,14 @@ impl CSFunc {
 
         let return_ty = match &rust_fn.decl.output {
             syn::ReturnType::Default => None,
-            syn::ReturnType::Type(_, ty) => {
-                Some(CSType::from_rust_type(&ty)?)
-            }
+            syn::ReturnType::Type(_, ty) => Some(CSType::from_rust_type(&ty)?),
         };
 
         Ok(CSFunc {
             name: rust_fn.ident.to_string(),
             args,
             return_ty,
-            cfg
+            cfg,
         })
     }
 }
@@ -311,13 +331,17 @@ impl Display for CSFunc {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let return_ty = match &self.return_ty {
             None => String::from("void"),
-            Some(ty) => ty.to_string()
+            Some(ty) => ty.to_string(),
         };
-        let args: Vec<String> = self.args
-          .iter()
-          .map(|arg| arg.to_string())
-          .collect();
-        write!(f, "{} static extern {} {}({});", self.cfg.access, return_ty, self.name, args.join(", "))
+        let args: Vec<String> = self.args.iter().map(|arg| arg.to_string()).collect();
+        write!(
+            f,
+            "{} static extern {} {}({});",
+            self.cfg.access,
+            return_ty,
+            self.name,
+            args.join(", ")
+        )
     }
 }
 
@@ -327,7 +351,7 @@ struct CSFile {
     consts: Vec<CSConst>,
     structs: Vec<Rc<CSStruct>>,
     funcs: Vec<CSFunc>,
-    type_defs: HashMap<String, CSTypeDef>
+    type_defs: HashMap<String, CSTypeDef>,
 }
 
 impl CSFile {
@@ -338,47 +362,55 @@ impl CSFile {
             consts: vec![],
             structs: vec![],
             funcs: vec![],
-            type_defs: HashMap::new()
+            type_defs: HashMap::new(),
         }
     }
 
     pub fn populate_from_rust_file(
         &mut self,
         rust_file: &syn::File,
-        cfg_mgr: &SymbolConfigManager
+        cfg_mgr: &SymbolConfigManager,
     ) -> Result<()> {
         for item in rust_file.items.iter() {
             match item {
                 Item::Const(item_const) => {
                     if let Some(cfg) = cfg_mgr.get(&item_const.ident) {
                         let cs_const = error::add_ident(
-                            CSConst::from_rust_const(&item_const, cfg), &item_const.ident)?;
+                            CSConst::from_rust_const(&item_const, cfg),
+                            &item_const.ident,
+                        )?;
                         self.consts.push(cs_const);
                     }
-                },
+                }
                 Item::Struct(item_struct) => {
                     if let Some(cfg) = cfg_mgr.get(&item_struct.ident) {
                         let cs_struct = error::add_ident(
-                            CSStruct::from_rust_struct(&item_struct, cfg), &item_struct.ident)?;
+                            CSStruct::from_rust_struct(&item_struct, cfg),
+                            &item_struct.ident,
+                        )?;
                         self.structs.push(Rc::new(cs_struct));
                     }
-                },
+                }
                 Item::Fn(item_fn) => {
                     if item_fn.abi.is_some() {
                         if let Some(cfg) = cfg_mgr.get(&item_fn.ident) {
                             let cs_func = error::add_ident(
-                                CSFunc::from_rust_fn(&item_fn, cfg), &item_fn.ident)?;
+                                CSFunc::from_rust_fn(&item_fn, cfg),
+                                &item_fn.ident,
+                            )?;
                             self.funcs.push(cs_func);
                         }
                     }
-                },
+                }
                 Item::Type(item_type) => {
                     if let Some(_cfg) = cfg_mgr.get(&item_type.ident) {
                         let type_def = error::add_ident(
-                            CSTypeDef::from_rust_type_def(&item_type), &item_type.ident)?;
+                            CSTypeDef::from_rust_type_def(&item_type),
+                            &item_type.ident,
+                        )?;
                         self.type_defs.insert(type_def.name.clone(), type_def);
                     }
-                },
+                }
                 _ => {}
             }
         }
@@ -415,7 +447,10 @@ impl CSFile {
 
 impl Display for CSFile {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        writeln!(f, "// This file has been auto-generated, please do not edit it.\n")?;
+        writeln!(
+            f,
+            "// This file has been auto-generated, please do not edit it.\n"
+        )?;
         writeln!(f, "using System;")?;
         writeln!(f, "using System.Runtime.InteropServices;\n")?;
 
@@ -424,7 +459,11 @@ impl Display for CSFile {
         }
         writeln!(f, "{} class {} {{", CSAccess::default(), self.class_name)?;
         for con in self.consts.iter() {
-            writeln!(f, "{}{} const {} {} = {};\n", INDENT, con.cfg.access, con.ty, con.name, con.value)?;
+            writeln!(
+                f,
+                "{}{} const {} {} = {};\n",
+                INDENT, con.cfg.access, con.ty, con.name, con.value
+            )?;
         }
         for func in self.funcs.iter() {
             writeln!(f, "{}[DllImport(\"{}\")]", INDENT, self.dll_name)?;
@@ -435,31 +474,28 @@ impl Display for CSFile {
 }
 
 /// A [builder pattern] for the Rust-to-C# conversion process.
-/// 
+///
 /// [builder pattern]: https://doc.rust-lang.org/1.0.0/style/ownership/builders.html
 pub struct Builder {
     class_name: String,
     dll_name: String,
     rust_code: String,
-    sconfig: SymbolConfigManager
+    sconfig: SymbolConfigManager,
 }
 
 impl Builder {
     /// Creates a new instance with the following arguments:
-    /// 
+    ///
     /// * `dll_name` is the name of the DLL that the C# `DllImport` attribute
     ///   will be bound to for all exported functions.
-    /// 
+    ///
     /// * `rust_code` is the source Rust code to convert into C#.
-    pub fn new<T: AsRef<str>>(
-        dll_name: T,
-        rust_code: String
-    ) -> Self {
+    pub fn new<T: AsRef<str>>(dll_name: T, rust_code: String) -> Self {
         Builder {
             class_name: String::from("RustExports"),
             dll_name: String::from(dll_name.as_ref()),
             rust_code,
-            sconfig: SymbolConfigManager::new()
+            sconfig: SymbolConfigManager::new(),
         }
     }
 
@@ -472,7 +508,7 @@ impl Builder {
 
     /// Specifies a list of Rust identifier patterns to be ignored (i.e., not
     /// exported to C#).
-    /// 
+    ///
     /// The pattern syntax is currently very simple: if it ends with a `*`, it
     /// matches any Rust identifier that starts with the part of the pattern before
     /// the `*` (e.g., `Boop*` matches `BoopJones` and `BoopFoo`). Otherwise, it
@@ -486,9 +522,9 @@ impl Builder {
     /// given C# access modifier. By default, all exports are given the `internal`
     /// access modifier.
     pub fn access<T: AsRef<str>>(mut self, symbol_name: T, access: CSAccess) -> Self {
-        self.sconfig.config_map.insert(String::from(symbol_name.as_ref()), SymbolConfig {
-            access
-        });
+        self.sconfig
+            .config_map
+            .insert(String::from(symbol_name.as_ref()), SymbolConfig { access });
         self
     }
 
@@ -505,7 +541,7 @@ impl Builder {
 fn parse_file(rust_code: &String) -> Result<syn::File> {
     match syn::parse_file(rust_code) {
         Ok(result) => Ok(result),
-        Err(err) => Err(Error::SynError(err))
+        Err(err) => Err(Error::SynError(err)),
     }
 }
 
@@ -514,8 +550,7 @@ fn resolve_type_def(ty: &CSType, type_defs: &HashMap<String, CSTypeDef>) -> Resu
         if ty.is_ptr && type_def.ty.is_ptr {
             unsupported(format!(
                 "double pointer to {} via type {} is unsupported!",
-                type_def.ty.name,
-                type_def.name
+                type_def.ty.name, type_def.name
             ))
         } else {
             Ok(Some(type_def.ty.clone()))
@@ -528,7 +563,7 @@ fn resolve_type_def(ty: &CSType, type_defs: &HashMap<String, CSTypeDef>) -> Resu
 fn munge_cs_name(name: String) -> String {
     match name.as_ref() {
         "string" => String::from("str"),
-        _ => name
+        _ => name,
     }
 }
 
@@ -546,7 +581,7 @@ fn to_cs_primitive<'a>(type_name: &'a str) -> &'a str {
         "usize" => "UIntPtr",
         "f32" => "Single",
         "f64" => "Double",
-        _ => type_name
+        _ => type_name,
     }
 }
 
@@ -565,17 +600,24 @@ mod tests {
     #[test]
     fn test_it_errors_on_invalid_rust_code() {
         let err = Builder::new("Blarg", String::from("HELLO THERE"))
-          .generate()
-          .unwrap_err();
+            .generate()
+            .unwrap_err();
         let err_msg = format!("{}", err);
         assert_eq!(err_msg, "Couldn't parse Rust code: expected `!`");
     }
 
     #[test]
     fn test_it_errors_on_unsupported_rust_code() {
-        let err = Builder::new("Blarg", String::from(r#"
+        let err = Builder::new(
+            "Blarg",
+            String::from(
+                r#"
             pub type MyFunkyThing = fn() -> void;
-        "#)).generate().unwrap_err();
+        "#,
+            ),
+        )
+        .generate()
+        .unwrap_err();
         assert_eq!(
             format!("{}", err),
             "Unable to export C# code while processing symbol \"MyFunkyThing\" because the type is unsupported"

@@ -1,11 +1,8 @@
+use insta::assert_snapshot_matches;
 use std::fs;
 use std::path::PathBuf;
-use insta::assert_snapshot_matches;
 
-use csharpbindgen::{
-    Builder,
-    CSAccess
-};
+use csharpbindgen::{Builder, CSAccess};
 
 fn load_example(name: &'static str) -> String {
     let mut path = PathBuf::new();
