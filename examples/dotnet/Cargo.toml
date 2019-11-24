@@ -1,0 +1,14 @@
+[package]
+name = "testdotnet"
+version = "0.1.0"
+authors = ["Jihyun Yu <yjh0502@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "testdotnet"
+crate-type = ["dylib"]
+
+[dependencies]
+
+[build-dependencies]
+csharpbindgen = { path = "../../" }

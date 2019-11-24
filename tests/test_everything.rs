@@ -20,6 +20,7 @@ fn test_main_example() {
         .ignore(&["ignore_*", "IGNORE_*", "Ignore*"])
         .access("public_func", CSAccess::Public)
         .access("PublicStruct", CSAccess::Public)
+        .access("PublicCallbackFn", CSAccess::Public)
         .generate()
         .unwrap();
 

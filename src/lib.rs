@@ -63,7 +63,7 @@ use symbol_config::{SymbolConfig, SymbolConfigManager};
 const INDENT: &'static str = "    ";
 
 /// Enumeration for C#'s access modifiers.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum CSAccess {
     Private,
     Protected,
@@ -106,14 +106,33 @@ impl CSTypeDef {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct CSType {
     name: String,
     is_ptr: bool,
-    st: Option<Rc<CSStruct>>,
+
+    descr: CSTyDescr,
+}
+
+#[derive(Clone, Debug)]
+enum CSTyDescr {
+    /// named type, including primitives and unknown types
+    Named,
+    /// struct type
+    Struct(Rc<CSStruct>),
+    /// delegate type
+    Delegate(Box<CSDelegate>),
 }
 
 impl CSType {
+    fn void() -> Self {
+        CSType {
+            name: "void".to_owned(),
+            is_ptr: false,
+            descr: CSTyDescr::Named,
+        }
+    }
+
     pub fn from_rust_type(rust_type: &syn::Type) -> Result<Self> {
         match rust_type {
             syn::Type::Path(type_path) => {
@@ -125,9 +144,10 @@ impl CSType {
                 Ok(CSType {
                     name: last.value().ident.to_string(),
                     is_ptr: false,
-                    st: None,
+                    descr: CSTyDescr::Named,
                 })
             }
+
             syn::Type::Ptr(type_ptr) => {
                 let mut wrapped_type = CSType::from_rust_type(&type_ptr.elem)?;
                 if wrapped_type.is_ptr {
@@ -139,7 +159,17 @@ impl CSType {
                 wrapped_type.is_ptr = true;
                 Ok(wrapped_type)
             }
-            _ => unsupported(format!("the type is unsupported")),
+
+            syn::Type::BareFn(bare_fn) => {
+                let d = CSDelegate::from_rust_fn(bare_fn)?;
+                Ok(CSType {
+                    name: "__bare_fn".into(),
+                    is_ptr: false,
+                    descr: CSTyDescr::Delegate(Box::new(d)),
+                })
+            }
+
+            _ => unsupported("the type is unsupported"),
         }
     }
 }
@@ -148,14 +178,55 @@ impl Display for CSType {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let name = to_cs_primitive(&self.name);
         if self.is_ptr {
-            if self.st.is_some() {
-                write!(f, "ref {}", name)
-            } else {
-                write!(f, "IntPtr /* {} */", name)
+            match &self.descr {
+                CSTyDescr::Struct(_s) => write!(f, "ref {}", name),
+                _ => write!(f, "IntPtr /* {} */", name),
             }
         } else {
             write!(f, "{}", name)
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CSDelegate {
+    output: Option<CSType>,
+    args: Vec<(String, CSType)>,
+    cfg: SymbolConfig,
+}
+
+impl CSDelegate {
+    pub fn from_rust_fn(bare_fn: &syn::TypeBareFn) -> Result<Self> {
+        if bare_fn.lifetimes.is_some() {
+            return unsupported("lifetimes are unsupported!");
+        }
+        if bare_fn.variadic.is_some() {
+            return unsupported("variadic is unsupported!");
+        }
+
+        let output = match bare_fn.output {
+            syn::ReturnType::Default => None,
+            syn::ReturnType::Type(_, ref out_ty) => Some(CSType::from_rust_type(out_ty)?),
+        };
+
+        let mut args = Vec::new();
+        for (i, fn_arg) in bare_fn.inputs.iter().enumerate() {
+            let name = match fn_arg.name {
+                Some((syn::BareFnArgName::Named(ref ident), _)) => ident.to_string(),
+                _ => format!("_unnamed_{}", i),
+            };
+            args.push((name, CSType::from_rust_type(&fn_arg.ty)?));
+        }
+
+        Ok(CSDelegate {
+            output,
+            args,
+            cfg: SymbolConfig::default(),
+        })
+    }
+
+    pub fn return_ty(&self) -> CSType {
+        self.output.clone().unwrap_or(CSType::void())
     }
 }
 
@@ -192,6 +263,7 @@ impl CSConst {
     }
 }
 
+#[derive(Debug)]
 struct CSStructField {
     name: String,
     ty: CSType,
@@ -210,6 +282,7 @@ impl CSStructField {
     }
 }
 
+#[derive(Debug)]
 struct CSStruct {
     name: String,
     fields: Vec<CSStructField>,
@@ -352,6 +425,7 @@ struct CSFile {
     structs: Vec<Rc<CSStruct>>,
     funcs: Vec<CSFunc>,
     type_defs: HashMap<String, CSTypeDef>,
+    delegate_defs: Vec<(String, CSDelegate)>,
 }
 
 impl CSFile {
@@ -363,6 +437,7 @@ impl CSFile {
             structs: vec![],
             funcs: vec![],
             type_defs: HashMap::new(),
+            delegate_defs: vec![],
         }
     }
 
@@ -403,12 +478,21 @@ impl CSFile {
                     }
                 }
                 Item::Type(item_type) => {
-                    if let Some(_cfg) = cfg_mgr.get(&item_type.ident) {
+                    if let Some(cfg) = cfg_mgr.get(&item_type.ident) {
                         let type_def = error::add_ident(
                             CSTypeDef::from_rust_type_def(&item_type),
                             &item_type.ident,
                         )?;
-                        self.type_defs.insert(type_def.name.clone(), type_def);
+
+                        match type_def.ty.descr {
+                            CSTyDescr::Delegate(mut d) => {
+                                d.cfg = cfg;
+                                self.delegate_defs.push((type_def.name.clone(), *d.clone()));
+                            }
+                            _ => {
+                                self.type_defs.insert(type_def.name.clone(), type_def);
+                            }
+                        }
                     }
                 }
                 _ => {}
@@ -427,17 +511,22 @@ impl CSFile {
 
         for func in self.funcs.iter_mut() {
             for arg in func.args.iter_mut() {
-                if let Some(ty) = resolve_type_def(&arg.ty, &self.type_defs)? {
-                    arg.ty = ty;
-                }
-                if let Some(st) = struct_map.get(&arg.ty.name.as_ref()) {
-                    arg.ty.st = Some((*st).clone());
-                }
+                resolve_type(&self.type_defs, &struct_map, &mut arg.ty)?;
             }
             if let Some(return_ty) = &func.return_ty {
                 if let Some(ty) = resolve_type_def(return_ty, &self.type_defs)? {
                     func.return_ty = Some(ty);
                 }
+            }
+        }
+
+        for (_name, d) in self.delegate_defs.iter_mut() {
+            if let Some(ty) = resolve_type_def(&d.return_ty(), &self.type_defs)? {
+                d.output = Some(ty);
+            }
+
+            for (_arg_name, arg_ty) in d.args.iter_mut() {
+                resolve_type(&self.type_defs, &struct_map, arg_ty)?;
             }
         }
 
@@ -458,6 +547,7 @@ impl Display for CSFile {
             writeln!(f, "{}", st)?;
         }
         writeln!(f, "{} class {} {{", CSAccess::default(), self.class_name)?;
+
         for con in self.consts.iter() {
             writeln!(
                 f,
@@ -465,6 +555,26 @@ impl Display for CSFile {
                 INDENT, con.cfg.access, con.ty, con.name, con.value
             )?;
         }
+
+        for (name, d) in self.delegate_defs.iter() {
+            write!(
+                f,
+                "{}{} delegate {} {}(",
+                INDENT,
+                d.cfg.access,
+                d.return_ty(),
+                name
+            )?;
+            for (i, (name, ty)) in d.args.iter().enumerate() {
+                if i == 0 {
+                    write!(f, "{} {}", ty, name)?;
+                } else {
+                    write!(f, ", {} {}", ty, name)?;
+                }
+            }
+            writeln!(f, ");\n")?;
+        }
+
         for func in self.funcs.iter() {
             writeln!(f, "{}[DllImport(\"{}\")]", INDENT, self.dll_name)?;
             writeln!(f, "{}{}\n", INDENT, func)?;
@@ -545,16 +655,37 @@ fn parse_file(rust_code: &String) -> Result<syn::File> {
     }
 }
 
+fn resolve_type(
+    type_defs: &HashMap<String, CSTypeDef>,
+    struct_map: &HashMap<&str, &Rc<CSStruct>>,
+    ty: &mut CSType,
+) -> Result<()> {
+    if let Some(ty1) = resolve_type_def(&ty, &type_defs)? {
+        *ty = ty1;
+    }
+    if let Some(st) = struct_map.get(&ty.name.as_ref()) {
+        ty.descr = CSTyDescr::Struct((*st).clone());
+    }
+    Ok(())
+}
+
 fn resolve_type_def(ty: &CSType, type_defs: &HashMap<String, CSTypeDef>) -> Result<Option<CSType>> {
     if let Some(type_def) = type_defs.get(&ty.name) {
         if ty.is_ptr && type_def.ty.is_ptr {
-            unsupported(format!(
+            return unsupported(format!(
                 "double pointer to {} via type {} is unsupported!",
                 type_def.ty.name, type_def.name
-            ))
-        } else {
-            Ok(Some(type_def.ty.clone()))
+            ));
         }
+        if let CSTyDescr::Delegate(_d) = &type_def.ty.descr {
+            // resolve delegate type to named type
+            return Ok(Some(CSType {
+                name: ty.name.to_owned(),
+                is_ptr: false,
+                descr: CSTyDescr::Named,
+            }));
+        }
+        Ok(Some(type_def.ty.clone()))
     } else {
         Ok(None)
     }
@@ -589,8 +720,11 @@ fn to_cs_var_decl<T: AsRef<str>>(ty: &CSType, name: T) -> String {
     format!("{} {}", ty, name.as_ref())
 }
 
-fn unsupported<T>(msg: String) -> Result<T> {
-    Err(Error::UnsupportedError(msg, None))
+fn unsupported<T, S>(msg: S) -> Result<T>
+where
+    S: Into<String>,
+{
+    Err(Error::UnsupportedError(msg.into(), None))
 }
 
 #[cfg(test)]
@@ -612,7 +746,7 @@ mod tests {
             "Blarg",
             String::from(
                 r#"
-            pub type MyFunkyThing = fn() -> void;
+            pub type MyFunkyThing<'a> = &'a u8;
         "#,
             ),
         )
