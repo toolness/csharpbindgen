@@ -1,6 +1,6 @@
 ---
-created: "2019-11-23T12:03:30.755697800Z"
-creator: insta@0.8.1
+created: "2019-11-24T11:48:59.425671948Z"
+creator: insta@0.8.2
 source: tests/test_everything.rs
 expression: code
 ---
@@ -34,11 +34,22 @@ public struct PublicStruct {
 internal class MyStuff {
     internal const Byte BOOP = 1;
 
+    internal delegate Byte CallbackFn(Byte v);
+
     [DllImport("MyDll")]
     public static extern void public_func();
 
     [DllImport("MyDll")]
     internal static extern Byte blarg(Int32 a, ref MyStruct b, IntPtr /* MyOpaqueStruct */ c);
+
+    [DllImport("MyDll")]
+    internal static extern Byte primitive_typeck(Byte _v1, SByte _v2, UInt16 _v3, Int16 _v4, UInt32 _v5, Int32 _v6, Int64 _v7, UInt64 _v8, UIntPtr _v9, IntPtr _v10);
+
+    [DllImport("MyDll")]
+    internal static extern Byte fn_with_callback(Byte v, CallbackFn cb);
+
+    [DllImport("MyDll")]
+    internal static extern Byte fn_with_callback_ptr(Byte v, IntPtr /* CallbackFn */ cb);
 
 }
 
