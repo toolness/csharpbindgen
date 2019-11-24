@@ -1,5 +1,5 @@
 ---
-created: "2019-11-24T12:09:58.575996631Z"
+created: "2019-11-24T12:59:31.538548128Z"
 creator: insta@0.8.2
 source: tests/test_everything.rs
 expression: code
@@ -36,7 +36,7 @@ internal class MyStuff {
 
     internal delegate Byte CallbackFn(Byte v);
 
-    internal delegate void CallbackFn2(ref MyStruct s);
+    public delegate void PublicCallbackFn(ref MyStruct s);
 
     [DllImport("MyDll")]
     public static extern void public_func();

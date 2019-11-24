@@ -192,6 +192,7 @@ impl Display for CSType {
 struct CSDelegate {
     output: Option<CSType>,
     args: Vec<(String, CSType)>,
+    cfg: SymbolConfig,
 }
 
 impl CSDelegate {
@@ -217,7 +218,11 @@ impl CSDelegate {
             args.push((name, CSType::from_rust_type(&fn_arg.ty)?));
         }
 
-        Ok(CSDelegate { output, args })
+        Ok(CSDelegate {
+            output,
+            args,
+            cfg: SymbolConfig::default(),
+        })
     }
 
     pub fn return_ty(&self) -> CSType {
@@ -473,14 +478,15 @@ impl CSFile {
                     }
                 }
                 Item::Type(item_type) => {
-                    if let Some(_cfg) = cfg_mgr.get(&item_type.ident) {
+                    if let Some(cfg) = cfg_mgr.get(&item_type.ident) {
                         let type_def = error::add_ident(
                             CSTypeDef::from_rust_type_def(&item_type),
                             &item_type.ident,
                         )?;
 
                         match type_def.ty.descr {
-                            CSTyDescr::Delegate(d) => {
+                            CSTyDescr::Delegate(mut d) => {
+                                d.cfg = cfg;
                                 self.delegate_defs.push((type_def.name.clone(), *d.clone()));
                             }
                             _ => {
@@ -551,7 +557,14 @@ impl Display for CSFile {
         }
 
         for (name, d) in self.delegate_defs.iter() {
-            write!(f, "{}internal delegate {} {}(", INDENT, d.return_ty(), name)?;
+            write!(
+                f,
+                "{}{} delegate {} {}(",
+                INDENT,
+                d.cfg.access,
+                d.return_ty(),
+                name
+            )?;
             for (i, (name, ty)) in d.args.iter().enumerate() {
                 if i == 0 {
                     write!(f, "{} {}", ty, name)?;

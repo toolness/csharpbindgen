@@ -48,7 +48,7 @@ pub extern "C" fn primitive_typeck(
 }
 
 pub type CallbackFn = extern "C" fn(v: u8) -> u8;
-pub type CallbackFn2 = extern "C" fn(s: *const MyStruct);
+pub type PublicCallbackFn = extern "C" fn(s: *const MyStruct);
 
 pub unsafe extern "C" fn fn_with_callback(v: u8, cb: CallbackFn) -> u8 {
     cb(v)
