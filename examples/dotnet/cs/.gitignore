@@ -1,0 +1,4 @@
+obj
+bin
+*.cs
+!Program.cs
