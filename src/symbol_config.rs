@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::ignores::Ignores;
 use crate::CSAccess;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct SymbolConfig {
     pub access: CSAccess,
 }

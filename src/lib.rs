@@ -63,7 +63,7 @@ use symbol_config::{SymbolConfig, SymbolConfigManager};
 const INDENT: &'static str = "    ";
 
 /// Enumeration for C#'s access modifiers.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum CSAccess {
     Private,
     Protected,
@@ -106,7 +106,7 @@ impl CSTypeDef {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct CSType {
     name: String,
     is_ptr: bool,
@@ -114,7 +114,7 @@ struct CSType {
     descr: CSTyDescr,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum CSTyDescr {
     /// named type, including primitives and unknown types
     Named,
@@ -188,7 +188,7 @@ impl Display for CSType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct CSDelegate {
     output: Option<CSType>,
     args: Vec<(String, CSType)>,
@@ -258,6 +258,7 @@ impl CSConst {
     }
 }
 
+#[derive(Debug)]
 struct CSStructField {
     name: String,
     ty: CSType,
@@ -276,6 +277,7 @@ impl CSStructField {
     }
 }
 
+#[derive(Debug)]
 struct CSStruct {
     name: String,
     fields: Vec<CSStructField>,
@@ -418,7 +420,7 @@ struct CSFile {
     structs: Vec<Rc<CSStruct>>,
     funcs: Vec<CSFunc>,
     type_defs: HashMap<String, CSTypeDef>,
-    delegate_defs: HashMap<String, CSDelegate>,
+    delegate_defs: Vec<(String, CSDelegate)>,
 }
 
 impl CSFile {
@@ -430,7 +432,7 @@ impl CSFile {
             structs: vec![],
             funcs: vec![],
             type_defs: HashMap::new(),
-            delegate_defs: HashMap::new(),
+            delegate_defs: vec![],
         }
     }
 
@@ -479,7 +481,7 @@ impl CSFile {
 
                         match type_def.ty.descr {
                             CSTyDescr::Delegate(d) => {
-                                self.delegate_defs.insert(type_def.name.clone(), *d.clone());
+                                self.delegate_defs.push((type_def.name.clone(), *d.clone()));
                             }
                             _ => {
                                 self.type_defs.insert(type_def.name.clone(), type_def);
@@ -503,12 +505,7 @@ impl CSFile {
 
         for func in self.funcs.iter_mut() {
             for arg in func.args.iter_mut() {
-                if let Some(ty) = resolve_type_def(&arg.ty, &self.type_defs)? {
-                    arg.ty = ty;
-                }
-                if let Some(st) = struct_map.get(&arg.ty.name.as_ref()) {
-                    arg.ty.descr = CSTyDescr::Struct((*st).clone());
-                }
+                resolve_type(&self.type_defs, &struct_map, &mut arg.ty)?;
             }
             if let Some(return_ty) = &func.return_ty {
                 if let Some(ty) = resolve_type_def(return_ty, &self.type_defs)? {
@@ -523,9 +520,7 @@ impl CSFile {
             }
 
             for (_arg_name, arg_ty) in d.args.iter_mut() {
-                if let Some(ty) = resolve_type_def(&arg_ty, &self.type_defs)? {
-                    *arg_ty = ty;
-                }
+                resolve_type(&self.type_defs, &struct_map, arg_ty)?;
             }
         }
 
@@ -645,6 +640,20 @@ fn parse_file(rust_code: &String) -> Result<syn::File> {
         Ok(result) => Ok(result),
         Err(err) => Err(Error::SynError(err)),
     }
+}
+
+fn resolve_type(
+    type_defs: &HashMap<String, CSTypeDef>,
+    struct_map: &HashMap<&str, &Rc<CSStruct>>,
+    ty: &mut CSType,
+) -> Result<()> {
+    if let Some(ty1) = resolve_type_def(&ty, &type_defs)? {
+        *ty = ty1;
+    }
+    if let Some(st) = struct_map.get(&ty.name.as_ref()) {
+        ty.descr = CSTyDescr::Struct((*st).clone());
+    }
+    Ok(())
 }
 
 fn resolve_type_def(ty: &CSType, type_defs: &HashMap<String, CSTypeDef>) -> Result<Option<CSType>> {
