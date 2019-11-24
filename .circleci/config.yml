@@ -28,3 +28,6 @@ jobs:
       - run:
           name: Run all tests
           command: cargo test --all
+      - run:
+          name: Ensure code is consistently formatted via rustfmt
+          command: rustup component add rustfmt && cargo fmt --all -- --check
